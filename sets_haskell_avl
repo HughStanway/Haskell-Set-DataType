@@ -1,0 +1,180 @@
+-- Create a set type that uses self-balancing AVL trees to store values. 
+data Set a = Leaf | Node (Set a) a (Set a)
+
+-- Functions needed to calculate the balance factor of the tree.
+height :: (Ord a) => Set a -> Int
+height Leaf = 0
+height (Node left x right) = 1 + (max (height left) (height right)) -- Calculate the height of the tree.
+
+balanceFactor :: (Ord a) => Set a -> Int
+balanceFactor Leaf = 0
+balanceFactor (Node left x right) = (height right) - (height left) -- Calculate the difference in height between left and right subtree.
+
+emptyNode :: (Ord a) => Set a -> Bool
+emptyNode Leaf = False
+emptyNode _ = True
+
+node :: Set a -> a
+node (Node _ x _) = x -- returns the value of the node of set.
+
+-- Four rotations used in AVL trees needed to balance the Tree: Left, LeftRight, Right and RightLeft.
+rightRotate :: Set a -> Set a 
+rightRotate (Node (Node leftY y rightY) x rightX) = Node leftY y (Node rightY x rightX)
+
+rightLeftRotate :: Set a -> Set a
+rightLeftRotate (Node leftX x (Node (Node leftZ z rightZ) y rightY)) = Node (Node leftX x leftZ) z (Node rightZ y rightY)
+
+leftRotate :: Set a -> Set a
+leftRotate (Node leftX x (Node leftY y rightY)) = Node (Node leftX x leftY) y rightY
+
+leftRightRotate :: Set a -> Set a
+leftRightRotate (Node (Node leftY y (Node leftZ z rightZ)) x rightX) = Node (Node leftY y leftZ) z (Node rightZ x rightX) 
+
+{-
+   PART 2.
+   If you do nothing else, at least get the following two functions working. They
+   are required for testing purposes.
+-}
+
+-- toList {2,1,4,3} => [1,2,3,4]
+-- the output must be sorted.
+toList :: Set a -> [a]
+toList Leaf = []
+toList (Node left x right) = toList left ++ [x] ++ toList right
+
+-- fromList [2,1,1,4,5] => {2,1,4,5}
+fromList :: Ord a => [a] -> Set a
+fromList xs = foldr insert Leaf xs
+
+
+{-
+   PART 3.
+   Your Set should contain the following functions.
+   DO NOT CHANGE THE TYPE SIGNATURES.
+-}
+-- test if two sets have the same elements.
+instance (Ord a) => Eq (Set a) where
+  s1 == s2 = toList s1 == toList s2 -- Converts both sets to lists then compares them.
+
+
+-- the empty set
+empty :: Set a
+empty = Leaf
+
+
+-- Set with one element
+singleton :: a -> Set a
+singleton x = Node Leaf x Leaf 
+
+
+-- insert an element of type a into a Set
+-- make sure there are no duplicates!
+insert :: (Ord a) => a -> Set a -> Set a
+insert x Leaf = singleton x
+insert x tree@(Node left y right)
+                              | x < y && emptyNode left && x < node left && (balanceFactor (Node leftInsert y right)) < -1  = rightRotate (Node leftInsert y right)
+                              | x < y && emptyNode left && x > node left && (balanceFactor (Node leftInsert y right)) < -1  = leftRightRotate (Node leftInsert y right)
+                              | x > y && emptyNode right && x > node right && (balanceFactor (Node left y rightInsert)) > 1 = leftRotate (Node left y rightInsert) 
+                              | x > y && emptyNode right && x < node right && (balanceFactor (Node left y rightInsert)) > 1 = rightLeftRotate (Node left y rightInsert)
+                              | x < y                                                                                       = (Node leftInsert y right)
+                              | x > y                                                                                       = (Node left y rightInsert)
+                              | otherwise                                                                                   = tree
+                                where
+                                  leftInsert = (insert x left)
+                                  rightInsert = (insert x right)
+
+
+-- join two Sets together
+-- be careful not to introduce duplicates.
+union :: (Ord a) => Set a -> Set a -> Set a
+union Leaf x = x
+union y Leaf = y
+union (Node left x right) y = union left (union right (insert x y)) -- Recursively traverses the first tree, inserting all nodes into the second tree using the `insert` function.
+
+
+-- return the common elements between two Sets
+intersection :: (Ord a) => Set a -> Set a -> Set a
+intersection Leaf _ = Leaf
+intersection xs ys = fromList (intersectionToList xs ys)
+
+intersectionToList :: (Ord a) => Set a -> Set a -> [a]
+intersectionToList Leaf _ = []
+intersectionToList (Node left x right) y
+                                      | x `member` y = (intersectionToList left y) ++ [x] ++ (intersectionToList right y)
+                                      | otherwise    = (intersectionToList left y) ++ (intersectionToList right y) 
+               
+
+-- all the elements in Set A *not* in Set B,
+-- {1,2,3,4} `difference` {3,4} => {1,2}
+-- {} `difference` {0} => {}
+difference :: (Ord a) => Set a -> Set a -> Set a
+difference Leaf _ = Leaf
+difference xs ys = fromList (differenceToList xs ys)
+
+differenceToList :: (Ord a) => Set a -> Set a -> [a]
+differenceToList Leaf _ = []
+differenceToList (Node left x right) y
+                              | not (x `member` y) = (differenceToList left y) ++ [x] ++(differenceToList right y)
+                              | otherwise    = (differenceToList left y) ++ (differenceToList right y)
+
+
+-- is element *a* in the Set?
+member :: (Ord a) => a -> Set a -> Bool
+member _ Leaf = False
+member x (Node left y right) -- Traverse the tree recursively for x if it gets to the end of a branch it returns False.
+                        | x < y     = member x left
+                        | x > y     = member x right
+                        | otherwise = True
+
+
+-- how many elements are there in the Set?
+cardinality :: Set a -> Int
+cardinality Leaf = 0
+cardinality (Node left _ right) = cardinality left + 1 + cardinality right -- Traverse the tree recursively along following both sides of branches, adding 1 for each node or 0 for each leaf.
+
+
+setmap :: (Ord b) => (a -> b) -> Set a -> Set b
+setmap f Leaf = Leaf 
+setmap f (Node left x right) = Node (setmap f left) (f x) (setmap f right) -- Traverse the tree recursively, applying f to each node.
+
+
+setfoldr :: (a -> b -> b) -> Set a -> b -> b
+setfoldr f Leaf v = v -- Adapt the recursive definition of foldr to traverse the binary tree instead of a list.
+setfoldr f (Node left x right) v = f x (setfoldr f right (setfoldr f left v)) -- Use recursion to traverse the list in both directions.
+
+
+-- powerset of a set
+-- powerset {1,2} => { {}, {1}, {2}, {1,2} }
+powerSet :: Set a -> Set (Set a)
+powerSet x = setOfSet (powerList (toList x))
+
+powerList :: [a] -> [[a]]
+powerList [] = [[]]
+powerList xs = [ x | x <- powerList (tail xs), x <- [x, (head xs):x]]
+
+setOfSet :: [[a]] -> Set (Set a)
+setOfSet = orderedFromList . map orderedFromList
+
+
+-- cartesian product of two sets
+cartesian :: Set a -> Set b -> Set (a, b)
+cartesian x y = (orderedFromList [(x, y) | x <- (toList x), y <- (toList y)]) -- Converts the sets into lists then uses list comprehension to calculate the cartesian product. Then converts back to sets.
+
+
+-- partition the set into two sets, with
+-- all elements that satisfy the predicate on the left,
+-- and the rest on the right
+partition :: (a -> Bool) -> Set a -> (Set a, Set a)
+partition f x = (setfilter f x, setfilter (not . f) x)
+
+setfilter :: (a -> Bool) -> Set a -> Set a
+setfilter f Leaf = Leaf
+setfilter f xs = orderedFromList ([x | x <- toList xs, f x])
+
+
+-- Auxillery function: orderedFromList is used to create balanced binary trees from already ordered lists - This is needed for the functions that cant use fromList due to the Ord constraint.
+orderedFromList :: [a] -> Set a
+orderedFromList [] = Leaf
+orderedFromList xs = Node (orderedFromList (take split xs)) (head (drop split xs)) (orderedFromList (drop (split + 1) xs))
+      where
+         split = (length xs) `div` 2
